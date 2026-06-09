@@ -52,14 +52,63 @@ Sob carga, com o dashboard de SLO aberto: **ativo o caos → o circuito abre →
 - **Degradação graciosa** — falhar bem (fallback) em vez de falhar feio.
 - **SLO-gated** — o caos não pode estourar o error budget (reuso do burn-rate do lab 2).
 
-## Como rodar
+## O pipeline (de fora para dentro)
+
+```
+rate limiter (inbound)  →  /orders  →  [ bulkhead → retry → circuit breaker → timeout → chaos ]  →  Payments
+                                                                                                  fallback ⤴ (degrada)
+```
+
+Cada estratégia tem um papel: o **bulkhead** isola concorrência; o **retry** absorve falhas
+transitórias; o **circuit breaker** abre rápido sob falha sustentada (fail-fast); o **timeout**
+corta tentativas lentas; o **chaos** (Simmy) é injetado logo antes da chamada real; e o
+**fallback** transforma a falha em degradação graciosa.
+
+## Endpoints
+
+| Endpoint | O quê |
+|---|---|
+| `POST /orders` | Cria um pedido chamando o Payments pelo pipeline resiliente |
+| `POST /chaos` | Liga/desliga **fault e latência** em runtime: `{ "fault": true, "injectionRate": 1.0 }` |
+
+## Como rodar + um experimento de caos
 
 **Pré-requisitos:** .NET 10 SDK e Docker.
 
 ```bash
 dotnet new install Aspire.ProjectTemplates   # uma vez
-dotnet run --project src/AppHost             # Orders + Payments + observabilidade + dashboard
+dotnet run --project src/AppHost             # Orders + Payments + dashboard
+
+# 1) baseline: pedido confirma
+curl -X POST http://localhost:<porta>/orders -H 'Content-Type: application/json' -d '{"amount":42}'
+#   → {"status":"confirmed", ...}
+
+# 2) injeta outage total do Payments
+curl -X POST http://localhost:<porta>/chaos  -H 'Content-Type: application/json' -d '{"fault":true,"injectionRate":1.0}'
+
+# 3) o pedido AINDA responde — degradado (o circuito abre, o fallback assume)
+curl -X POST http://localhost:<porta>/orders -H 'Content-Type: application/json' -d '{"amount":42}'
+#   → {"status":"pending_payment", "payment":null}   ← disponibilidade preservada
+
+# 4) desliga o caos → volta a confirmar
+curl -X POST http://localhost:<porta>/chaos  -H 'Content-Type: application/json' -d '{"fault":false}'
 ```
+
+## Verificação ao vivo
+
+```bash
+dotnet test
+```
+
+- **Baseline + toggle de caos**: confirma → degrada sob caos → recupera.
+- **Experimento (resiliência medida)**: sob **outage total** do Payments, a **disponibilidade do
+  `/orders` fica ≥ 99%** (o fallback segura) — o caos é um experimento com critério de sucesso,
+  não uma demo (ADR-005). Última execução: **disponibilidade 100%, todos degradados**.
+
+> **Observabilidade:** o SLO/burn-rate (reuso do
+> [observability-from-scratch](https://github.com/thomasmoreira/observability-from-scratch)) é o
+> oráculo do experimento — sob caos, o burn-rate **não** pode estourar. O teste acima já é a
+> verificação automatizada disso.
 
 ## Decisões de arquitetura
 
