@@ -21,7 +21,7 @@ public class OrdersTests(AppHostFixture fixture) : IClassFixture<AppHostFixture>
     }
 
     [Fact]
-    public async Task Chaos_fault_injection_fails_the_order_then_recovers_when_disabled()
+    public async Task Chaos_degrades_gracefully_then_recovers_when_disabled()
     {
         using var client = fixture.App.CreateHttpClient("orders");
 
@@ -31,9 +31,12 @@ public class OrdersTests(AppHostFixture fixture) : IClassFixture<AppHostFixture>
             using var on = await client.PostAsJsonAsync("/chaos", new { fault = true, injectionRate = 1.0 });
             on.EnsureSuccessStatusCode();
 
-            // Every attempt (incl. retries) hits an injected 500 → the order fails.
-            using var failing = await client.PostAsJsonAsync("/orders", new { amount = 10.0m });
-            Assert.Equal(HttpStatusCode.InternalServerError, failing.StatusCode);
+            // The order still succeeds (HTTP 200) but DEGRADED: payment pending, not 5xx. The
+            // fallback preserves availability — this is the killer detail (ADR-003).
+            using var degraded = await client.PostAsJsonAsync("/orders", new { amount = 10.0m });
+            Assert.Equal(HttpStatusCode.OK, degraded.StatusCode);
+            using var degradedDoc = JsonDocument.Parse(await degraded.Content.ReadAsStringAsync());
+            Assert.Equal("pending_payment", degradedDoc.RootElement.GetProperty("status").GetString());
         }
         finally
         {
@@ -44,5 +47,7 @@ public class OrdersTests(AppHostFixture fixture) : IClassFixture<AppHostFixture>
         // With chaos disabled, orders confirm again — the toggle is live.
         using var recovered = await client.PostAsJsonAsync("/orders", new { amount = 10.0m });
         Assert.Equal(HttpStatusCode.OK, recovered.StatusCode);
+        using var recoveredDoc = JsonDocument.Parse(await recovered.Content.ReadAsStringAsync());
+        Assert.Equal("confirmed", recoveredDoc.RootElement.GetProperty("status").GetString());
     }
 }
