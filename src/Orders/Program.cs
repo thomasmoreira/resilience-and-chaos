@@ -51,12 +51,13 @@ builder.Services.AddHttpClient("payments", client => client.BaseAddress = new Ur
             MaxRetryAttempts = 3,
             BackoffType = DelayBackoffType.Exponential,
             UseJitter = true,
+            MaxDelay = TimeSpan.FromSeconds(1), // cap backoff — don't hammer a dead dependency for long.
         });
 
         pipeline.AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
         {
             FailureRatio = 0.5,
-            MinimumThroughput = 10,
+            MinimumThroughput = 5, // open quickly under sustained failure so we fail fast → fallback.
             SamplingDuration = TimeSpan.FromSeconds(10),
             BreakDuration = TimeSpan.FromSeconds(5),
         });
