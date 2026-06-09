@@ -1,0 +1,24 @@
+## .NET build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+## IDE / editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+## User-specific / secrets
+appsettings.*.local.json
+*.DotSettings.user
+
+## OS noise
+.DS_Store
+Thumbs.db
+
+## Aspire / DCP local state
+**/.aspire/
