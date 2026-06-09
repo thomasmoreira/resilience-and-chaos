@@ -6,4 +6,9 @@
     <UserSecretsId>586c3b77-3032-4bf6-b967-606d00c299b0</UserSecretsId>
   </PropertyGroup>
 
+  <ItemGroup Label="Orchestrated services">
+    <ProjectReference Include="../Payments/Payments.csproj" />
+    <ProjectReference Include="../Orders/Orders.csproj" />
+  </ItemGroup>
+
 </Project>
