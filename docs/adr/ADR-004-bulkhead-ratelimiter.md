@@ -13,4 +13,4 @@ cascata). Picos de tráfego podem saturar recursos.
 ## Consequências
 - ✅ Uma dependência lenta não afoga o serviço todo (falha isolada, não em cascata).
 - ✅ Backpressure explícito em vez de colapso silencioso.
-- ⚠️ Limites mal calibrados rejeitam tráfego legítimo; ajustados via carga (k6) + SLO.
+- ⚠️ Limites mal calibrados rejeitam tráfego legítimo; calibrados observando a disponibilidade sob carga.
